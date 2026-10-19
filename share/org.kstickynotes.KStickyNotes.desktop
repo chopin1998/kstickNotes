@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=KStickyNotes
+Comment=xfce4-notes-inspired sticky notes for KDE Plasma
+Comment[zh_CN]=xfce4-notes 的 KDE Plasma 便签实现
+Exec=kstickynotes
+Icon=kstickynotes
+Terminal=false
+Categories=Utility;TextEditor;
+StartupNotify=true
+StartupWMClass=kstickynotes

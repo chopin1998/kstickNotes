@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="currentNote" type="Int"><default>-1</default></entry>
+    <entry name="textZoom" type="Int"><default>100</default></entry>
+    <entry name="preview" type="Bool"><default>false</default></entry>
+    <entry name="popupWidth" type="Int"><default>580</default></entry>
+    <entry name="popupHeight" type="Int"><default>420</default></entry>
+  </group>
+</kcfg>

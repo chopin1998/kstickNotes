@@ -1,0 +1,18 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.marco.kstickynotes",
+    "Name": "KStickyNotes",
+    "Description": "Tabbed notes in a Plasma panel popup",
+    "Description[zh_CN]": "面板弹出式多标签便签",
+    "Icon": "accessories-text-editor",
+    "Category": "Utilities",
+    "Version": "0.2.0",
+    "License": "MIT",
+    "Authors": [{"Name": "KStickyNotes contributors"}]
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "X-Plasma-UniqueApplet": true,
+  "X-Plasma-NotificationArea": true,
+  "X-Plasma-NotificationAreaCategory": "ApplicationStatus"
+}

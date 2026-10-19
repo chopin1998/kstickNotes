@@ -1,0 +1,20 @@
+[project]
+name = "kstickynotes"
+version = "0.2.0"
+description = "An xfce4-notes-inspired sticky notes app for KDE Plasma 6 and Wayland"
+requires-python = ">=3.11"
+dependencies = ["PySide6-Essentials>=6.8,<7"]
+
+[project.scripts]
+kstickynotes = "kstickynotes.app:main"
+kstickynotes-service = "kstickynotes.service:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
