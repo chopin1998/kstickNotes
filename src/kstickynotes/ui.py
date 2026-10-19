@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QTabWidget, QTextBrowser, QToolButton, QVBoxLayout, QWidget,
 )
 from .storage import Note, Store
+from .sync_ui import SyncController
 
 
 def dialog(parent, title, message, *, value=None, confirm=False):
@@ -167,7 +168,7 @@ class Window(QMainWindow):
         self.timer.setInterval(400)
         self.timer.timeout.connect(self.flush)
         notes = store.notes()
-        if not notes:
+        if not notes and not store.revisions():
             notes = [store.create()]
         for note in notes:
             self.add_page(note)
@@ -187,6 +188,7 @@ class Window(QMainWindow):
         self.tray.activated.connect(self.tray_activated)
         self.tray.show()
         self.tab_changed()
+        self.sync = SyncController(self)
 
     def action(self, text, icon, shortcut, callback):
         action = QAction(QIcon.fromTheme(icon), text, self)
@@ -215,6 +217,8 @@ class Window(QMainWindow):
 
     def changed(self, page):
         self.dirty[page.note_id] = page.editor.toPlainText()
+        if hasattr(self, "sync"):
+            self.sync.defer()
         self.statusBar().showMessage("尚未保存…")
         self.timer.start()
 
@@ -256,6 +260,7 @@ class Window(QMainWindow):
             self.report_error(f"新建便签失败：{error}")
             return
         self.tabs.setCurrentWidget(page)
+        self.sync.defer()
         self.show_notes()
 
     def rename_note(self):
@@ -271,6 +276,7 @@ class Window(QMainWindow):
             self.report_error(f"重命名失败：{error}")
             return
         self.tabs.setTabText(index, title)
+        self.sync.defer()
 
     def delete_note(self):
         index = self.tabs.currentIndex()
@@ -288,7 +294,8 @@ class Window(QMainWindow):
             return
         self.tabs.removeTab(index)
         page.deleteLater()
-        # An empty notebook remains usable; startup creates a blank page.
+        self.sync.defer()
+        # Keep a deleted notebook empty across restarts and across devices.
         self.flush()
 
     def cycle(self, direction):
@@ -348,5 +355,6 @@ class Window(QMainWindow):
     def request_quit(self):
         if self.flush():
             self.quitting = True
+            self.sync.close()
             self.tray.hide()
             QApplication.instance().quit()

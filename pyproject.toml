@@ -1,6 +1,6 @@
 [project]
 name = "kstickynotes"
-version = "0.2.0"
+version = "0.3.0"
 description = "An xfce4-notes-inspired sticky notes app for KDE Plasma 6 and Wayland"
 requires-python = ">=3.11"
 dependencies = ["PySide6-Essentials>=6.8,<7"]

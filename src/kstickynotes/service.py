@@ -44,7 +44,7 @@ class NotesService(QObject):
             raise RuntimeError("独立窗口版正在使用便签。请从其托盘菜单退出，再点击重试。")
         try:
             store = Store(self.directory / "notes.sqlite3")
-            if not store.notes():
+            if not store.notes() and not store.revisions():
                 store.create()
         except Exception:
             lock.close()
