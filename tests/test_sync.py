@@ -296,3 +296,39 @@ def test_conditional_put_race_verifies_existing_content(tmp_path):
     assert transport(server).exchange(store.revisions())==[]
     assert any(method=='GET' for method,_ in server.calls)
     store.close()
+
+
+
+def test_sync_indicator_tracks_success_expiry_failure_and_recovery(tmp_path,monkeypatch):
+    from PySide6.QtCore import QSettings
+    from kstickynotes.ui import Window
+    import kstickynotes.sync_ui as sync_ui
+    store=Store(tmp_path/'db')
+    window=Window(store,QSettings(str(tmp_path/'settings.ini'),QSettings.IniFormat))
+    controller=window.sync
+    clock=[100.0]
+    monkeypatch.setattr(sync_ui.time,'monotonic',lambda:clock[0])
+    try:
+        assert controller.indicator.property('syncState')=='stale'
+        controller.results.put((None,[],None))
+        controller.finish()
+        assert controller.indicator.property('syncState')=='recent'
+        clock[0]=129.99
+        controller.update_indicator()
+        assert controller.indicator.property('syncState')=='recent'
+        clock[0]=130.0
+        controller.update_indicator()
+        assert controller.indicator.property('syncState')=='stale'
+        controller.results.put((None,None,'网络中断'))
+        controller.finish()
+        assert controller.indicator.property('syncState')=='error'
+        controller.busy=True
+        controller.update_indicator()
+        assert controller.indicator.property('syncState')=='syncing'
+        controller.results.put((None,[],None))
+        controller.finish()
+        assert controller.indicator.property('syncState')=='recent'
+        assert controller.indicator.accessibleName()=='最近 30 秒内同步成功'
+    finally:
+        controller.close();window.timer.stop();window.tray.hide();window.quitting=True;window.close()
+        window.deleteLater();store.close()

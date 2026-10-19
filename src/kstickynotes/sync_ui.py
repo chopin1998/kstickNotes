@@ -1,6 +1,7 @@
 """Nonblocking window-mode sync controller and credential settings dialog."""
 import queue
 import threading
+import time
 from PySide6.QtCore import QObject, QTimer, QSignalBlocker, QSettings
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QLineEdit,
                               QCheckBox, QLabel, QVBoxLayout)
@@ -68,8 +69,18 @@ class SyncController(QObject):
         self.cancel = threading.Event()
         self.results = queue.Queue()
         self._secrets = {}
+        self.last_success = None
+        self.sync_error = False
         self.label = QLabel('同步未设置')
+        self.indicator = QLabel('●')
+        self.indicator.setFixedSize(16, 18)
+        window.statusBar().addPermanentWidget(self.indicator)
         window.statusBar().addPermanentWidget(self.label)
+        self.indicator_timer = QTimer(self)
+        self.indicator_timer.setInterval(1000)
+        self.indicator_timer.timeout.connect(self.update_indicator)
+        self.indicator_timer.start()
+        self.update_indicator()
         self.poll = QTimer(self)
         self.poll.setInterval(200)
         self.poll.timeout.connect(self.finish)
@@ -94,6 +105,22 @@ class SyncController(QObject):
         if self.config().get('user'):
             self.label.setText('等待同步' if self.config()['enabled'] else '自动同步已关闭')
             QTimer.singleShot(1500, self.automatic)
+
+    def update_indicator(self):
+        if self.busy:
+            state, color, description = 'syncing', '#3daee9', '正在同步'
+        elif self.sync_error:
+            state, color, description = 'error', '#da4453', '同步失败；请查看旁边状态文字的提示'
+        elif self.last_success is not None and time.monotonic() - self.last_success < 30:
+            state, color, description = 'recent', '#27ae60', '最近 30 秒内同步成功'
+        else:
+            state, color, description = 'stale', '#9e9e9e', '最近 30 秒没有成功同步记录；不代表同步出错'
+        if self.indicator.property('syncState') == state:
+            return
+        self.indicator.setProperty('syncState', state)
+        self.indicator.setStyleSheet(f'color: {color}; font-size: 14px;')
+        self.indicator.setToolTip(description)
+        self.indicator.setAccessibleName(description)
 
     def config(self):
         settings = self.window.settings
@@ -136,6 +163,8 @@ class SyncController(QObject):
             return
         if not self.window.flush():
             self.label.setText('同步暂停：请先保存本地修改')
+            self.sync_error = True
+            self.update_indicator()
             return
         config = config or self.config()
         if not config['user']:
@@ -145,8 +174,11 @@ class SyncController(QObject):
             records = self.window.store.revisions()
         except Exception:
             self.label.setText('无法读取同步数据')
+            self.sync_error = True
+            self.update_indicator()
             return
         self.busy = True
+        self.update_indicator()
         self.now_action.setEnabled(False)
         self.setup_action.setEnabled(False)
         self.label.setText('正在同步…')
@@ -197,6 +229,8 @@ class SyncController(QObject):
                 try:
                     conflicts = self.window.store.merge(incoming)
                     self.refresh_pages()
+                    self.last_success = time.monotonic()
+                    self.sync_error = False
                     self.label.setText(f'已同步 · {conflicts} 处冲突已保留' if conflicts else '已同步')
                     self.label.setToolTip('新增、修改和删除已合并；本轮产生的冲突记录将在下一轮上传')
                     if incoming or conflicts:
@@ -204,8 +238,10 @@ class SyncController(QObject):
                 except Exception as issue:
                     error = str(issue) if isinstance(issue, ValueError) else '同步合并失败，本地修改仍在，请检查磁盘后重试'
         if error:
+            self.sync_error = True
             self.label.setText('同步失败（悬停查看）')
             self.label.setToolTip(error)
+        self.update_indicator()
         if self.again and not error:
             self.again = False
             self.debounce.start()
@@ -250,5 +286,5 @@ class SyncController(QObject):
         self.closed = True
         self.cancel.set()
         self._secrets.clear()
-        for timer in (self.poll, self.periodic, self.debounce):
+        for timer in (self.poll, self.periodic, self.debounce, self.indicator_timer):
             timer.stop()
