@@ -195,18 +195,63 @@ def test_url_security_and_redirect_credentials():
     assert 'sensitive' not in str(issue.value)
 
 
-def test_wallet_password_goes_through_stdin_only(monkeypatch):
-    import kstickynotes.wallet as wallet
+@pytest.fixture
+def fake_wallet(monkeypatch):
     from types import SimpleNamespace
-    calls=[]
-    monkeypatch.setattr(wallet.shutil,'which',lambda name:'/usr/bin/'+name)
-    def run(command,**kwargs):
-        calls.append((command,kwargs))
-        return SimpleNamespace(returncode=0,stdout='kdewallet\n' if 'networkWallet' in command[-1] else '')
-    monkeypatch.setattr(wallet.subprocess,'run',run)
-    assert wallet.wallet_password('https://example.test/','user','keep secret spaces ')=='keep secret spaces '
-    assert all('keep secret spaces ' not in ' '.join(args) for args,_ in calls)
-    assert calls[-1][1]['input']=='keep secret spaces \n'
+    from jeepney import HeaderFields, MessageType
+    from kstickynotes import wallet
+
+    replies = {'isEnabled': True, 'networkWallet': 'kdewallet', 'open': 7,
+               'close': 0, 'isOpen': True}
+    calls = []
+
+    class Bus:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def send_and_get_reply(self, message, *, timeout):
+            method = message.header.fields[HeaderFields.member]
+            calls.append((method, message.body))
+            return SimpleNamespace(header=SimpleNamespace(message_type=MessageType.method_return),
+                                   body=(replies[method],))
+
+    monkeypatch.setattr(wallet, 'open_dbus_connection', lambda **kwargs: Bus())
+    return wallet, replies, calls
+
+
+def test_wallet_creates_missing_folder_and_verifies_first_write(fake_wallet):
+    wallet, replies, calls = fake_wallet
+    secret = 'keep secret spaces '
+    replies.update(hasFolder=False, createFolder=True, writePassword=0,
+                   hasEntry=True, readPassword=secret)
+    assert wallet.wallet_password('https://example.test/', 'user', secret) == secret
+    methods = [method for method, _ in calls]
+    assert methods.index('createFolder') < methods.index('writePassword') < methods.index('readPassword')
+    assert methods[-1] == 'close'
+    assert [method for method, args in calls if secret in args] == ['writePassword']
+
+
+def test_wallet_distinguishes_missing_entry_from_locked_wallet(fake_wallet):
+    wallet, replies, calls = fake_wallet
+    replies['hasEntry'] = False
+    with pytest.raises(wallet.WalletError, match='没有此账号'):
+        wallet.wallet_password('https://example.test/', 'user')
+    assert all(method != 'writePassword' for method, _ in calls)
+    replies['isOpen'] = False
+    with pytest.raises(wallet.WalletError, match='钱包已锁定'):
+        wallet.wallet_password('https://example.test/', 'user')
+
+
+def test_wallet_rejects_unverified_write_without_exposing_secrets(fake_wallet):
+    wallet, replies, calls = fake_wallet
+    replies.update(hasFolder=True, writePassword=0, hasEntry=True, readPassword='wrong value')
+    with pytest.raises(wallet.WalletError, match='读回的应用密码不一致') as err:
+        wallet.wallet_password('https://example.test/', 'user', 'dummy secret')
+    assert 'wrong value' not in str(err.value) and 'dummy secret' not in str(err.value)
+    assert calls[-1][0] == 'close'
 
 
 def test_ui_sync_preserves_edits_made_during_request(tmp_path,monkeypatch):
